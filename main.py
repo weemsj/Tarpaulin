@@ -11,6 +11,7 @@ import json
 from flask import Flask, request, jsonify
 from google.cloud import datastore
 from google.cloud.datastore.query import PropertyFilter
+from google.cloud import storage
 import requests
 from jose import jwt
 from authlib.integrations.flask_client import OAuth
@@ -20,8 +21,9 @@ app = Flask(__name__)
 app.secret_key = 'SECRET_KEY'
 client = datastore.Client()
 
-# Contan
+# Constants
 USERS = 'Users'
+PHOTO_BUCKET = 'hw6-avatars-weemsj'
 
 # Error messages
 BAD_REQUEST = {"Error": "The request body is invalid"}  # 400
@@ -139,7 +141,7 @@ def clear_datastore():
     query = client.query(kind=USERS)
     users = list(query.fetch())
     for user in users:
-        client.delete(client.key(USERS, user.key))
+        client.delete(user.key)
 
 
 def create_user(username, password, role):
@@ -258,7 +260,7 @@ def get_user(user_id):
     return user, 200
 
 
-@app.route('/users/<user_id>/avatar', methods=['DELETE'])
+@app.route('/users/<user_id>/avatar', methods=['POST'])
 def upload_avatar(user_id):
     """_summary_
 
@@ -268,20 +270,32 @@ def upload_avatar(user_id):
     Returns:
         _type_: _description_
     """
+    if 'file' not in request.files:
+        return BAD_REQUEST, 400
+
     try:
         payload = verify_jwt(request)
     except AuthError:
         return UNAUTHORIZED, 401
+
     user_key = client.key(USERS, int(user_id))
     user = client.get(user_key)
     if not user:
         return FORBIDDEN, 403
     if user['role'] != 'admin' and user['sub'] != payload['sub']:
         return FORBIDDEN, 403
-    user['avatar'] = None
+
+    file_obj = request.files['file']
+    print(request.files)
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(PHOTO_BUCKET)
+    blob = bucket.blob(file_obj.filename)
+    file_obj.seek(0)
+    blob.upload_from_file(file_obj)
+
+    user['avatar_url'] = request.url + f'/users/{user_id}/avatar'
     client.put(user)
     return user, 200
-
 
 
 if __name__ == '__main__':
