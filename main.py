@@ -8,13 +8,13 @@ Assignment 6: Portfolio Project Tarpaulin
 
 from urllib.request import urlopen
 import json
-from flask import Flask, request, jsonify
-from google.cloud import datastore
+from flask import Flask, request, jsonify, send_file
+from google.cloud import datastore, storage
 from google.cloud.datastore.query import PropertyFilter
-from google.cloud import storage
 import requests
 from jose import jwt
 from authlib.integrations.flask_client import OAuth
+import io
 
 
 app = Flask(__name__)
