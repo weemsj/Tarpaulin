@@ -8,13 +8,13 @@ Assignment 6: Portfolio Project Tarpaulin
 
 from urllib.request import urlopen
 import json
+import io
 from flask import Flask, request, jsonify, send_file
 from google.cloud import datastore, storage
 from google.cloud.datastore.query import PropertyFilter
 import requests
 from jose import jwt
 from authlib.integrations.flask_client import OAuth
-import io
 
 
 app = Flask(__name__)
@@ -196,7 +196,6 @@ def login():
     query = client.query(kind=USERS)
     users = list(query.add_filter('username', '=', username).fetch())
     user = users[0]
-    print(user)
     user.update(
         {'sub': payload['sub']}
     )
@@ -284,18 +283,122 @@ def upload_avatar(user_id):
         return FORBIDDEN, 403
     if user['role'] != 'admin' and user['sub'] != payload['sub']:
         return FORBIDDEN, 403
-
     file_obj = request.files['file']
-    print(request.files)
+    print(file_obj)
+    print(file_obj.filename)
     storage_client = storage.Client()
     bucket = storage_client.get_bucket(PHOTO_BUCKET)
     blob = bucket.blob(file_obj.filename)
     file_obj.seek(0)
     blob.upload_from_file(file_obj)
 
-    user['avatar_url'] = request.url + f'/users/{user_id}/avatar'
+    user['avatar_url'] = request.url
+    user['avatar_name'] = file_obj.filename
     client.put(user)
-    return user, 200
+    user.pop('password', None)
+    user.pop('username', None)
+    user.pop('sub', None)
+    user.pop('role', None)
+    user.pop('courses', None)
+    user.pop('avatar_name', None)
+    return (user, 200)
+
+
+@app.route('/users/<user_id>/avatar', methods=['GET'])
+def get_avatar(user_id):
+    """_summary_
+
+    Args:
+        user_id (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    try:
+        payload = verify_jwt(request)
+    except AuthError:
+        return UNAUTHORIZED, 401
+
+    user_key = client.key(USERS, int(user_id))
+    user = client.get(user_key)
+    if not user:
+        return FORBIDDEN, 403
+    if user['role'] != 'admin' and user['sub'] != payload['sub']:
+        return FORBIDDEN, 403
+    if 'avatar_url' not in user:
+        return NOT_FOUND, 404
+    file_name = user['avatar_name']
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(PHOTO_BUCKET)
+    blob = bucket.blob(file_name)
+    file_obj = io.BytesIO()
+    blob.download_to_file(file_obj)
+    file_obj.seek(0)
+    return send_file(file_obj,
+                     mimetype='image/jpeg',
+                     download_name=file_name), 200
+
+
+@app.route('/users/<user_id>/avatar', methods=['DELETE'])
+def delete_avatar(user_id):
+    """_summary_
+
+    Args:
+        user_id (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    try:
+        payload = verify_jwt(request)
+    except AuthError:
+        return UNAUTHORIZED, 401
+
+    user_key = client.key(USERS, int(user_id))
+    user = client.get(user_key)
+    if not user:
+        return FORBIDDEN, 403
+    if user['role'] != 'admin' and user['sub'] != payload['sub']:
+        return FORBIDDEN, 403
+    if 'avatar_url' not in user:
+        return NOT_FOUND, 404
+    file_name = user['avatar_name']
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(PHOTO_BUCKET)
+    blob = bucket.blob(file_name)
+    blob.delete()
+    user.pop('avatar_url', None)
+    user.pop('avatar_name', None)
+    client.put(user)
+    return '', 204
+
+
+@app.route('courses', methods=['POST'])
+def create_course():
+    try:
+        payload = verify_jwt(request)
+    except AuthError:
+        return UNAUTHORIZED, 401
+    if payload['role'] != 'admin':
+        return FORBIDDEN, 403
+    content = request.get_json()
+    try:
+        subject = content['subject']
+        number = content['number']
+        title = content['title']
+        term = content['term']
+        instructor = content['instructor']
+    except KeyError:
+        return BAD_REQUEST, 400
+    instructor_key = client.key(USERS, int(instructor))
+    instructor = client.get(instructor_key)
+    if not instructor:
+        return BAD_REQUEST, 400
+    
+
+
+
+
 
 
 if __name__ == '__main__':
