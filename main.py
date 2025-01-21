@@ -219,7 +219,7 @@ def index():
     return 'Welcome to the Tarpaulin API, navigate to /users/login to login.'
 
 
-@app.route('/' + USERS + '/login', methods=['POST'])
+@app.route('/users/login', methods=['POST'])
 def login():
     """Login endpoint that generates a JWT for a registered user of the app
     by sending a request to AuthO domain created for this api to get a token.
@@ -237,6 +237,12 @@ def login():
         password = content['password']
     except KeyError:
         return BAD_REQUEST, 400
+    if 'admin' in username:
+        create_user(username, password, 'admin')
+    if 'instructor' in username:
+        create_user(username, password, 'instructor')
+    if 'student' in username:
+        create_user(username, password, 'student')
     body = {'grant_type': 'password',
             'username': username,
             'password': password,
@@ -256,6 +262,7 @@ def login():
     query = client.query(kind=USERS)
     users = list(query.add_filter(filter=PropertyFilter(
         'username', '=', username)).fetch())
+    print(users)
     user = users[0]
     user.update(
         {'sub': payload['sub']}
@@ -337,7 +344,7 @@ def get_user(user_id):
     return user, 200
 
 
-@app.route('/users/<user_id>/avatar', methods=['POST'])
+@app.route('/' + USERS + '/<user_id>/avatar', methods=['POST'])
 def upload_avatar(user_id):
     """Upload the .png in the request body to the Google Cloud Storage bucket
     if there is already an avatar for the user, it will be replaced.
@@ -767,16 +774,6 @@ def get_course_students(course_id):
 
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=8080, debug=True)
-    # Clear datastore
+    # clear_datastore()
     clear_datastore()
-    # Create users
-    create_user('admin1@osu.com', 'User1234', 'admin')
-    create_user('instructor1@osu.com', 'User1234', 'instructor')
-    create_user('instructor2@osu.com', 'User1234', 'instructor')
-    create_user('student1@osu.com', 'User1234', 'student')
-    create_user('student2@osu.com', 'User1234', 'student')
-    create_user('student3@osu.com', 'User1234', 'student')
-    create_user('student4@osu.com', 'User1234', 'student')
-    create_user('student5@osu.com', 'User1234', 'student')
-    create_user('student6@osu.com', 'User1234', 'student')
+    app.run(host='localhost', port=8080, debug=True)
